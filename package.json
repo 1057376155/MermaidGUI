@@ -1,0 +1,28 @@
+{
+  "name": "mermaid-gui",
+  "version": "1.0.0",
+  "description": "Mermaid 文件查看器 - 支持多窗口和树形文件浏览",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "mermaid": "^10.8.0",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/node": "^20.11.28",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "electron": "^29.1.4",
+    "electron-vite": "^2.2.0",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.6"
+  }
+}

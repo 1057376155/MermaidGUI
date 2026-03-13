@@ -1,0 +1,21 @@
+declare global {
+  interface Window {
+    api: {
+      openDirectory: () => Promise<string | null>
+      readTree: (dirPath: string) => Promise<FileNode[]>
+      readFile: (filePath: string) => Promise<string | null>
+      getRecentDir: () => Promise<string | undefined>
+      newWindow: (filePath?: string) => Promise<number>
+      onDirectoryOpened: (callback: (dirPath: string) => void) => () => void
+    }
+  }
+}
+
+interface FileNode {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  children?: FileNode[]
+}
+
+export type { FileNode }
