@@ -15,6 +15,9 @@ export default defineConfig({
         '@': resolve('src/renderer')
       }
     },
-    plugins: [vue()]
+    plugins: [vue()],
+    server: {
+      port: 9527
+    }
   }
 })
