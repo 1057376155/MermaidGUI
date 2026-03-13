@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import mermaid from 'mermaid'
 
 const props = defineProps<{
@@ -32,6 +32,15 @@ const MIN_SCALE = 0.1
 const MAX_SCALE = 5
 const SCALE_STEP = 0.1
 
+// 用于检测双指双击
+let lastCtrlWheelTime = 0
+
+// 检测是否是 macOS
+const isMacOS = computed(() => {
+  return navigator.platform.toLowerCase().includes('mac') ||
+         navigator.userAgent.toLowerCase().includes('mac')
+})
+
 // 初始化 mermaid
 onMounted(() => {
   mermaid.initialize({
@@ -59,14 +68,10 @@ async function renderMermaid() {
   renderError.value = ''
 
   try {
-    // 生成唯一 ID
     const id = `mermaid-${Date.now()}`
-    
-    // 渲染
     const { svg } = await mermaid.render(id, props.content)
     svgContent.value = svg
     
-    // 重置缩放和平移，并获取原始尺寸
     nextTick(() => {
       initSvgSize()
       resetView()
@@ -86,16 +91,13 @@ function initSvgSize() {
   const svg = svgContainerRef.value.querySelector('svg')
   if (!svg) return
   
-  // 获取 SVG 的原始尺寸
   const bbox = svg.getBBox()
   const widthAttr = svg.getAttribute('width')
   const heightAttr = svg.getAttribute('height')
   
-  // 解析原始宽高
   originalWidth.value = widthAttr ? parseFloat(widthAttr) : bbox.width + bbox.x * 2
   originalHeight.value = heightAttr ? parseFloat(heightAttr) : bbox.height + bbox.y * 2
   
-  // 设置 viewBox 以支持缩放
   svg.setAttribute('viewBox', `0 0 ${originalWidth.value} ${originalHeight.value}`)
   svg.removeAttribute('width')
   svg.removeAttribute('height')
@@ -103,7 +105,6 @@ function initSvgSize() {
   svg.style.height = `${originalHeight.value}px`
 }
 
-// 监听内容变化
 watch(() => props.content, () => {
   nextTick(() => renderMermaid())
 }, { immediate: true })
@@ -115,7 +116,6 @@ function updateSvgTransform() {
   const svg = svgContainerRef.value.querySelector('svg')
   if (!svg) return
   
-  // 使用 CSS transform 只用于平移，缩放通过修改 SVG 尺寸实现
   const newWidth = originalWidth.value * scale.value
   const newHeight = originalHeight.value * scale.value
   
@@ -146,12 +146,9 @@ function fitToContainer() {
   if (!containerRef.value || !svgContainerRef.value || originalWidth.value === 0) return
   
   const container = containerRef.value
-  
-  // 获取容器尺寸
   const containerWidth = container.clientWidth - 40
   const containerHeight = container.clientHeight - 40
   
-  // 计算适合容器的缩放比例
   const scaleX = containerWidth / originalWidth.value
   const scaleY = containerHeight / originalHeight.value
   const fitScale = Math.min(scaleX, scaleY, 1)
@@ -162,37 +159,73 @@ function fitToContainer() {
   updateSvgTransform()
 }
 
-// 鼠标滚轮缩放
+// 以指定点为中心缩放
+function zoomAtPoint(newScale: number, clientX: number, clientY: number) {
+  if (!containerRef.value) return
+  
+  const rect = containerRef.value.getBoundingClientRect()
+  const mouseX = clientX - rect.left
+  const mouseY = clientY - rect.top
+  
+  const contentX = (mouseX - translateX.value) / scale.value
+  const contentY = (mouseY - translateY.value) / scale.value
+  
+  scale.value = newScale
+  
+  translateX.value = mouseX - contentX * newScale
+  translateY.value = mouseY - contentY * newScale
+  
+  updateSvgTransform()
+}
+
+// 处理 wheel 事件
 function handleWheel(event: WheelEvent) {
   event.preventDefault()
   
-  const delta = event.deltaY > 0 ? -SCALE_STEP : SCALE_STEP
-  const newScale = Math.max(MIN_SCALE, Math.min(scale.value + delta, MAX_SCALE))
-  
-  if (newScale === scale.value) return
-  
-  // 以鼠标位置为中心缩放
-  if (containerRef.value) {
-    const rect = containerRef.value.getBoundingClientRect()
-    const mouseX = event.clientX - rect.left
-    const mouseY = event.clientY - rect.top
+  // macOS 触摸板处理
+  if (isMacOS.value) {
+    if (event.ctrlKey) {
+      // ctrlKey + wheel 可能是：
+      // 1. 双指捏合缩放（连续事件，deltaY 小）
+      // 2. 双指双击智能缩放（单个事件，deltaY 大）
+      
+      const now = Date.now()
+      const absDeltaY = Math.abs(event.deltaY)
+      
+      // 判断是否是双指双击：
+      // - deltaY 值大（> 50）
+      // - 距离上次事件时间较长（> 100ms）
+      const isSmartZoom = absDeltaY > 50 && (now - lastCtrlWheelTime > 100)
+      
+      lastCtrlWheelTime = now
+      
+      if (isSmartZoom) {
+        // 双指双击，忽略
+        return
+      }
+      
+      // 双指捏合缩放
+      const zoomFactor = 1 - event.deltaY * 0.01
+      const newScale = Math.max(MIN_SCALE, Math.min(scale.value * zoomFactor, MAX_SCALE))
+      zoomAtPoint(newScale, event.clientX, event.clientY)
+    } else {
+      // 双指拖动平移
+      translateX.value -= event.deltaX
+      translateY.value -= event.deltaY
+      updateSvgTransform()
+    }
+  } else {
+    // Windows/Linux 滚轮缩放
+    const delta = event.deltaY > 0 ? -SCALE_STEP : SCALE_STEP
+    const newScale = Math.max(MIN_SCALE, Math.min(scale.value + delta, MAX_SCALE))
     
-    // 计算缩放前鼠标在内容上的位置
-    const contentX = (mouseX - translateX.value) / scale.value
-    const contentY = (mouseY - translateY.value) / scale.value
-    
-    // 更新缩放
-    scale.value = newScale
-    
-    // 调整平移以保持鼠标位置不变
-    translateX.value = mouseX - contentX * newScale
-    translateY.value = mouseY - contentY * newScale
-    
-    updateSvgTransform()
+    if (newScale !== scale.value) {
+      zoomAtPoint(newScale, event.clientX, event.clientY)
+    }
   }
 }
 
-// 拖拽功能
+// 鼠标拖拽功能
 function handleMouseDown(event: MouseEvent) {
   if (event.button !== 0) return
   
@@ -246,9 +279,9 @@ async function copySvg() {
   
   try {
     await navigator.clipboard.writeText(svgContent.value)
-    alert('SVG 代码已复制到剪贴板')
+    console.log('SVG 代码已复制到剪贴板')
   } catch {
-    alert('复制失败')
+    console.error('复制失败')
   }
 }
 

@@ -2,9 +2,49 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <title>Mermaid GUI</title>
+    <style>
+      /* 完全禁用所有触摸手势和缩放 */
+      html, body {
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-text-size-adjust: none;
+        -ms-text-size-adjust: none;
+        text-size-adjust: none;
+        overscroll-behavior: none;
+      }
+      
+      /* 禁用所有元素的触摸缩放 */
+      * {
+        touch-action: none;
+      }
+    </style>
+    <script>
+      // 在最早阶段阻止所有缩放相关事件
+      document.addEventListener('DOMContentLoaded', () => {
+        // 阻止双指双击
+        document.addEventListener('dblclick', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }, { capture: true })
+        
+        // 阻止手势事件
+        document.addEventListener('gesturestart', (e) => e.preventDefault(), { capture: true })
+        document.addEventListener('gesturechange', (e) => e.preventDefault(), { capture: true })
+        document.addEventListener('gestureend', (e) => e.preventDefault(), { capture: true })
+        
+        // 阻止触摸事件导致的缩放
+        document.addEventListener('touchstart', (e) => {
+          if (e.touches.length > 1) {
+            e.preventDefault()
+          }
+        }, { capture: true, passive: false })
+      })
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -4,6 +4,10 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { readdir, readFile, stat } from 'fs/promises'
 import Store from 'electron-store'
 
+// 禁用 macOS 智能缩放和其他触摸手势
+app.commandLine.appendSwitch('disable-pinch')
+app.commandLine.appendSwitch('disable-features', 'TouchpadAndWheelScrollLatching')
+
 // 存储最近打开的目录
 const store = new Store<{ recentDir: string }>()
 
@@ -22,12 +26,28 @@ async function createWindow(filePath?: string): Promise<BrowserWindow> {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      zoomFactor: 1,
+      minimumFontSize: 0
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    // 禁用视觉缩放（包括双指双击智能缩放）
+    mainWindow.webContents.setVisualZoomLevelLimits(1, 1)
+    mainWindow.webContents.setLayoutZoomLevelLimits(0, 0)
+    // 开发模式下自动打开开发者工具
+    if (is.dev) {
+      mainWindow.webContents.openDevTools()
+    }
+  })
+  
+  // 确保页面加载后也禁用缩放
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.setVisualZoomLevelLimits(1, 1)
+    mainWindow.webContents.setLayoutZoomLevelLimits(0, 0)
+    mainWindow.webContents.setZoomFactor(1)
   })
 
   // 加载渲染进程
@@ -184,10 +204,6 @@ app.whenReady().then(async () => {
       submenu: [
         { role: 'reload' },
         { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { role: 'resetZoom' },
         { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
