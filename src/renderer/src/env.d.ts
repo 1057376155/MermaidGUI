@@ -20,6 +20,7 @@ declare global {
       watchDirectory: (dirPath: string) => Promise<void>
       unwatchDirectory: () => Promise<void>
       onDirectoryChanged: (callback: (dirPath: string) => void) => () => void
+      searchInFiles: (dirPath: string, query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }) => Promise<SearchResult[]>
     }
   }
 }
@@ -31,4 +32,14 @@ interface FileNode {
   children?: FileNode[]
 }
 
-export type { FileNode }
+interface SearchResult {
+  filePath: string
+  fileName: string
+  lineNumber: number
+  columnNumber: number
+  lineContent: string
+  matchStart: number
+  matchEnd: number
+}
+
+export type { FileNode, SearchResult }

@@ -9,6 +9,17 @@ interface FileNode {
   children?: FileNode[]
 }
 
+// 搜索结果类型
+interface SearchResult {
+  filePath: string
+  fileName: string
+  lineNumber: number
+  columnNumber: number
+  lineContent: string
+  matchStart: number
+  matchEnd: number
+}
+
 // 自定义 API
 const api = {
   // 打开目录对话框
@@ -85,7 +96,11 @@ const api = {
   onDirectoryChanged: (callback: (dirPath: string) => void) => {
     ipcRenderer.on('directory:changed', (_, dirPath) => callback(dirPath))
     return () => ipcRenderer.removeAllListeners('directory:changed')
-  }
+  },
+
+  // 搜索文件内容
+  searchInFiles: (dirPath: string, query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }): Promise<SearchResult[]> => 
+    ipcRenderer.invoke('file:search', dirPath, query, options)
 }
 
 // 暴露给渲染进程

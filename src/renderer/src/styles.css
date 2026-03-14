@@ -109,6 +109,10 @@ body {
   background: var(--accent-color);
 }
 
+.btn.active {
+  background: var(--accent-color);
+}
+
 .btn .icon {
   font-size: 14px;
 }
@@ -387,4 +391,13 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* 搜索面板 */
+.search-panel-overlay {
+  position: absolute;
+  top: 50px;
+  right: 20px;
+  width: 400px;
+  z-index: 100;
 }

@@ -1,9 +1,20 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
-import { join } from 'path'
+import { join, relative } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { readdir, readFile, stat, unlink } from 'fs/promises'
 import { watch, FSWatcher } from 'fs'
 import Store from 'electron-store'
+
+// 搜索结果类型
+interface SearchResult {
+  filePath: string
+  fileName: string
+  lineNumber: number
+  columnNumber: number
+  lineContent: string
+  matchStart: number
+  matchEnd: number
+}
 
 // 禁用 macOS 智能缩放和其他触摸手势
 app.commandLine.appendSwitch('disable-pinch')
@@ -187,6 +198,63 @@ async function readDirectory(dirPath: string): Promise<FileNode[]> {
   })
 }
 
+// 递归搜索文件内容
+async function searchInDirectory(
+  dirPath: string,
+  query: string,
+  options: { caseSensitive: boolean; wholeWord: boolean },
+  results: SearchResult[] = []
+): Promise<SearchResult[]> {
+  const entries = await readdir(dirPath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    // 忽略隐藏文件和 node_modules
+    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue
+
+    const fullPath = join(dirPath, entry.name)
+
+    if (entry.isDirectory()) {
+      await searchInDirectory(fullPath, query, options, results)
+    } else if (entry.isFile() && (entry.name.endsWith('.mmd') || entry.name.endsWith('.mermaid') || entry.name.endsWith('.md'))) {
+      try {
+        const content = await readFile(fullPath, 'utf-8')
+        const lines = content.split('\n')
+
+        // 构建正则表达式
+        let pattern: RegExp
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        if (options.wholeWord) {
+          pattern = new RegExp(`\\b${escapedQuery}\\b`, options.caseSensitive ? 'g' : 'gi')
+        } else {
+          pattern = new RegExp(escapedQuery, options.caseSensitive ? 'g' : 'gi')
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
+          let match: RegExpExecArray | null
+          pattern.lastIndex = 0 // 重置正则状态
+
+          while ((match = pattern.exec(line)) !== null) {
+            results.push({
+              filePath: fullPath,
+              fileName: entry.name,
+              lineNumber: i + 1,
+              columnNumber: match.index + 1,
+              lineContent: line,
+              matchStart: match.index,
+              matchEnd: match.index + match[0].length
+            })
+          }
+        }
+      } catch (error) {
+        console.error('搜索文件失败:', fullPath, error)
+      }
+    }
+  }
+
+  return results
+}
+
 // IPC 处理
 ipcMain.handle('dialog:openDirectory', async () => {
   const result = await dialog.showOpenDialog({
@@ -232,6 +300,20 @@ ipcMain.handle('file:readContent', async (_, filePath: string) => {
   } catch (error) {
     console.error('读取文件失败:', error)
     return null
+  }
+})
+
+// 搜索文件内容
+ipcMain.handle('file:search', async (_, dirPath: string, query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }) => {
+  try {
+    if (!query.trim()) return []
+    return await searchInDirectory(dirPath, query, {
+      caseSensitive: options?.caseSensitive ?? false,
+      wholeWord: options?.wholeWord ?? false
+    })
+  } catch (error) {
+    console.error('搜索失败:', error)
+    return []
   }
 })
 

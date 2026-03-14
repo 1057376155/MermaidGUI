@@ -7,6 +7,8 @@ import hljs from 'highlight.js'
 const props = defineProps<{
   content: string
   filePath?: string
+  highlightLine?: number
+  highlightText?: string
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -134,6 +136,66 @@ async function renderMermaidBlocks() {
 watch(() => props.content, () => {
   nextTick(() => renderMarkdown())
 }, { immediate: true })
+
+// 滚动到并高亮指定文本
+function scrollToHighlight() {
+  if (!containerRef.value || !props.highlightText) return
+
+  // 使用 TreeWalker 查找包含目标文本的元素
+  const walker = document.createTreeWalker(
+    containerRef.value,
+    NodeFilter.SHOW_TEXT,
+    null
+  )
+
+  let found = false
+  let node: Text | null
+  while ((node = walker.nextNode() as Text | null)) {
+    const text = node.textContent || ''
+    const index = text.indexOf(props.highlightText)
+    if (index !== -1) {
+      found = true
+      const parent = node.parentElement
+      if (parent) {
+        // 滚动到元素
+        parent.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+        // 添加高亮效果
+        parent.classList.add('search-highlight-element')
+
+        // 3秒后移除高亮
+        setTimeout(() => {
+          parent.classList.remove('search-highlight-element')
+        }, 3000)
+      }
+      break
+    }
+  }
+
+  if (!found) {
+    // 如果精确匹配失败，尝试滚动到大概位置（基于行号估算）
+    if (props.highlightLine && props.highlightLine > 0) {
+      // 估算滚动位置
+      const avgLineHeight = 24 // 估算的行高
+      const scrollPosition = (props.highlightLine - 10) * avgLineHeight
+      if (containerRef.value) {
+        containerRef.value.scrollTop = Math.max(0, scrollPosition)
+      }
+    }
+  }
+}
+
+// 监听高亮文本变化
+watch(() => props.highlightText, () => {
+  nextTick(() => {
+    setTimeout(scrollToHighlight, 100)
+  })
+})
+
+// 暴露方法供父组件调用
+defineExpose({
+  scrollToHighlight
+})
 </script>
 
 <template>
@@ -444,5 +506,22 @@ watch(() => props.content, () => {
 .markdown-content :deep(.hljs-comment) {
   color: #5c6370;
   font-style: italic;
+}
+
+/* 搜索高亮效果 */
+.markdown-content :deep(.search-highlight-element) {
+  background: rgba(255, 200, 0, 0.3);
+  border-radius: 2px;
+  animation: highlight-pulse 0.5s ease-out;
+  transition: background 0.3s ease;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    background: rgba(255, 200, 0, 0.6);
+  }
+  100% {
+    background: rgba(255, 200, 0, 0.3);
+  }
 }
 </style>

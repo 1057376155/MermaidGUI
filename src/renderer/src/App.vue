@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import FileTree from './components/FileTree.vue'
 import MermaidViewer from './components/MermaidViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
 import RecentDirs from './components/RecentDirs.vue'
-import type { FileNode } from '../env.d'
+import SearchPanel from './components/SearchPanel.vue'
+import type { FileNode, SearchResult } from '../env.d'
 
 const currentDir = ref<string>('')
 const fileTree = ref<FileNode[]>([])
@@ -15,6 +16,12 @@ const isLoading = ref(false)
 const recentDirsRef = ref<InstanceType<typeof RecentDirs> | null>(null)
 const expandedPaths = ref<Set<string>>(new Set())
 const sidebarCollapsed = ref(false)
+
+// 搜索相关状态
+const showSearch = ref(false)
+const highlightLine = ref<number | undefined>(undefined)
+const highlightText = ref<string | undefined>(undefined)
+const markdownViewerRef = ref<InstanceType<typeof MarkdownViewer> | null>(null)
 
 // 根据文件扩展名判断文件类型
 const fileType = computed(() => {
@@ -211,6 +218,36 @@ async function openFloatingPreview(filePath: string) {
   await window.api.openFloatingPreview(filePath)
 }
 
+// 切换搜索面板
+function toggleSearch() {
+  showSearch.value = !showSearch.value
+  if (!showSearch.value) {
+    highlightLine.value = undefined
+    highlightText.value = undefined
+  }
+}
+
+// 处理搜索结果选择
+async function handleSearchResult(result: SearchResult) {
+  // 如果不是当前文件，先加载文件
+  if (selectedFile.value !== result.filePath) {
+    await selectFile(result.filePath)
+  }
+
+  // 设置高亮信息
+  highlightLine.value = result.lineNumber
+  highlightText.value = result.lineContent.slice(result.matchStart, result.matchEnd)
+
+  // 关闭搜索面板
+  showSearch.value = false
+
+  // 等待渲染完成后滚动到高亮位置
+  await nextTick()
+  setTimeout(() => {
+    markdownViewerRef.value?.scrollToHighlight()
+  }, 200)
+}
+
 // 监听菜单打开目录事件
 let unsubscribe: (() => void) | undefined
 let unsubscribeDirChanged: (() => void) | undefined
@@ -234,6 +271,9 @@ onMounted(async () => {
   if (recentDir) {
     await loadDirectory(recentDir)
   }
+
+  // 添加键盘快捷键
+  document.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
@@ -241,7 +281,24 @@ onUnmounted(() => {
   unsubscribeDirChanged?.()
   // 停止监听文件变化
   window.api.unwatchDirectory()
+  // 移除键盘事件监听
+  document.removeEventListener('keydown', handleKeydown)
 })
+
+// 键盘快捷键处理
+function handleKeydown(e: KeyboardEvent) {
+  // Ctrl+F / Cmd+F 打开搜索
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault()
+    if (currentDir.value) {
+      showSearch.value = true
+    }
+  }
+  // Escape 关闭搜索
+  if (e.key === 'Escape' && showSearch.value) {
+    showSearch.value = false
+  }
+}
 </script>
 
 <template>
@@ -259,6 +316,16 @@ onUnmounted(() => {
         <button class="btn" @click="createNewWindow" title="新建窗口">
           <span class="icon">🪟</span>
           新建窗口
+        </button>
+        <button
+          v-if="currentDir"
+          class="btn"
+          :class="{ active: showSearch }"
+          @click="toggleSearch"
+          title="搜索 (Ctrl+F)"
+        >
+          <span class="icon">🔍</span>
+          搜索
         </button>
       </div>
       <div class="toolbar-right">
@@ -310,6 +377,15 @@ onUnmounted(() => {
 
       <!-- 右侧渲染区 -->
       <section class="viewer">
+        <!-- 搜索面板 -->
+        <SearchPanel
+          v-if="showSearch && currentDir"
+          :current-dir="currentDir"
+          class="search-panel-overlay"
+          @select-result="handleSearchResult"
+          @close="showSearch = false"
+        />
+
         <MermaidViewer
           v-if="fileContent && fileType === 'mermaid'"
           :content="fileContent"
@@ -317,8 +393,11 @@ onUnmounted(() => {
         />
         <MarkdownViewer
           v-else-if="fileContent && fileType === 'markdown'"
+          ref="markdownViewerRef"
           :content="fileContent"
           :file-path="selectedFile"
+          :highlight-line="highlightLine"
+          :highlight-text="highlightText"
         />
         <div v-else class="empty-viewer">
           <div class="placeholder">
