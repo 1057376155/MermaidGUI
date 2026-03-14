@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import TitleBar from './components/TitleBar.vue'
 import FileTree from './components/FileTree.vue'
 import MermaidViewer from './components/MermaidViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
@@ -85,6 +86,48 @@ async function createNewWindow() {
   await window.api.newWindow()
 }
 
+// 复制文件路径到剪贴板
+async function copyPath(filePath: string) {
+  try {
+    await navigator.clipboard.writeText(filePath)
+    console.log('路径已复制:', filePath)
+  } catch (error) {
+    console.error('复制路径失败:', error)
+  }
+}
+
+// 删除文件
+async function deleteFile(filePath: string) {
+  if (!confirm(`确定要删除 ${filePath.split('/').pop()} 吗？`)) {
+    return
+  }
+
+  const success = await window.api.deleteFile(filePath)
+  if (success) {
+    // 如果删除的是当前选中的文件，清空内容
+    if (selectedFile.value === filePath) {
+      selectedFile.value = ''
+      fileContent.value = ''
+    }
+    // 刷新目录树
+    if (currentDir.value) {
+      await loadDirectory(currentDir.value)
+    }
+  } else {
+    alert('删除文件失败')
+  }
+}
+
+// 在文件夹中显示
+async function revealInFolder(filePath: string) {
+  await window.api.revealInFolder(filePath)
+}
+
+// 打开悬浮预览窗口
+async function openFloatingPreview(filePath: string) {
+  await window.api.openFloatingPreview(filePath)
+}
+
 // 监听菜单打开目录事件
 let unsubscribe: (() => void) | undefined
 
@@ -108,17 +151,25 @@ onUnmounted(() => {
 
 <template>
   <div class="app-container">
-    <!-- 顶部工具栏 -->
+    <!-- 顶部工具栏（包含窗口控制） -->
     <header class="toolbar">
-      <button class="btn" @click="openDirectory">
-        <span class="icon">📁</span>
-        打开目录
-      </button>
-      <button class="btn" @click="createNewWindow" title="新建窗口">
-        <span class="icon">🪟</span>
-        新建窗口
-      </button>
-      <span v-if="currentDir" class="current-path">{{ currentDir }}</span>
+      <div class="toolbar-left">
+        <span class="app-icon">📊</span>
+        <span class="app-title">MermaidGUI</span>
+        <div class="toolbar-divider"></div>
+        <button class="btn" @click="openDirectory">
+          <span class="icon">📁</span>
+          打开目录
+        </button>
+        <button class="btn" @click="createNewWindow" title="新建窗口">
+          <span class="icon">🪟</span>
+          新建窗口
+        </button>
+      </div>
+      <div class="toolbar-right">
+        <span v-if="currentDir" class="current-path">{{ currentDir }}</span>
+        <TitleBar />
+      </div>
     </header>
 
     <!-- 主内容区 -->
@@ -136,6 +187,10 @@ onUnmounted(() => {
           @select="selectFile"
           @open-new-window="openInNewWindow"
           @load-children="loadChildren"
+          @copy-path="copyPath"
+          @delete-file="deleteFile"
+          @reveal-in-folder="revealInFolder"
+          @open-floating-preview="openFloatingPreview"
         />
         <div v-else class="empty-state">
           <p>请打开一个包含 .mmd 或 .md 文件的目录</p>

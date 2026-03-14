@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { FileNode } from '../env.d'
+import ContextMenu from './ContextMenu.vue'
+import type { MenuItem } from './ContextMenu.vue'
 
 const props = defineProps<{
   nodes: FileNode[]
@@ -12,7 +14,89 @@ const emit = defineEmits<{
   select: [path: string]
   'open-new-window': [path: string]
   'load-children': [path: string]
+  'copy-path': [path: string]
+  'delete-file': [path: string]
+  'reveal-in-folder': [path: string]
+  'open-floating-preview': [path: string]
 }>()
+
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const contextMenuTarget = ref<string>('')
+
+const fileMenuItems: MenuItem[] = [
+  {
+    label: '悬浮预览',
+    icon: '🔍',
+    shortcut: 'Space',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('open-floating-preview', contextMenuTarget.value)
+      }
+    }
+  },
+  { divider: true },
+  {
+    label: '在文件夹中显示',
+    icon: '📂',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('reveal-in-folder', contextMenuTarget.value)
+      }
+    }
+  },
+  {
+    label: '复制路径',
+    icon: '📋',
+    shortcut: 'Ctrl+C',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('copy-path', contextMenuTarget.value)
+      }
+    }
+  },
+  {
+    label: '在新窗口打开',
+    icon: '🪟',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('open-new-window', contextMenuTarget.value)
+      }
+    }
+  },
+  { divider: true },
+  {
+    label: '删除',
+    icon: '🗑️',
+    shortcut: 'Del',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('delete-file', contextMenuTarget.value)
+      }
+    }
+  }
+]
+
+const dirMenuItems: MenuItem[] = [
+  {
+    label: '在文件夹中显示',
+    icon: '📂',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('reveal-in-folder', contextMenuTarget.value)
+      }
+    }
+  },
+  {
+    label: '复制路径',
+    icon: '📋',
+    shortcut: 'Ctrl+C',
+    action: () => {
+      if (contextMenuTarget.value) {
+        emit('copy-path', contextMenuTarget.value)
+      }
+    }
+  }
+]
 
 const expanded = ref<Set<string>>(new Set())
 const loading = ref<Set<string>>(new Set())
@@ -42,10 +126,9 @@ function handleClick(node: FileNode, event: MouseEvent) {
 }
 
 function handleContextMenu(node: FileNode, event: MouseEvent) {
-  if (node.type === 'file') {
-    event.preventDefault()
-    emit('open-new-window', node.path)
-  }
+  event.preventDefault()
+  contextMenuTarget.value = node.path
+  contextMenuRef.value?.show(event.clientX, event.clientY)
 }
 
 // 根据文件扩展名获取图标
@@ -115,8 +198,15 @@ const level = props.level ?? 0
           @select="(path) => emit('select', path)"
           @open-new-window="(path) => emit('open-new-window', path)"
           @load-children="(path) => emit('load-children', path)"
+          @copy-path="(path) => emit('copy-path', path)"
+          @delete-file="(path) => emit('delete-file', path)"
+          @reveal-in-folder="(path) => emit('reveal-in-folder', path)"
+          @open-floating-preview="(path) => emit('open-floating-preview', path)"
         />
       </div>
     </li>
   </ul>
+
+  <!-- 右键菜单 -->
+  <ContextMenu ref="contextMenuRef" :items="contextMenuTarget && nodes.find(n => n.path === contextMenuTarget)?.type === 'directory' ? dirMenuItems : fileMenuItems" />
 </template>

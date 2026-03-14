@@ -35,7 +35,38 @@ const api = {
   onDirectoryOpened: (callback: (dirPath: string) => void) => {
     ipcRenderer.on('directory:opened', (_, dirPath) => callback(dirPath))
     return () => ipcRenderer.removeAllListeners('directory:opened')
-  }
+  },
+
+  // 窗口控制
+  minimizeWindow: (): Promise<void> => 
+    ipcRenderer.invoke('window:minimize'),
+  
+  maximizeWindow: (): Promise<void> => 
+    ipcRenderer.invoke('window:maximize'),
+  
+  closeWindow: (): Promise<void> => 
+    ipcRenderer.invoke('window:close'),
+
+  // 监听窗口最大化状态变化
+  onWindowMaximized: (callback: (isMaximized: boolean) => void) => {
+    ipcRenderer.on('window:maximized', (_, isMaximized) => callback(isMaximized))
+    return () => ipcRenderer.removeAllListeners('window:maximized')
+  },
+
+  // 文件操作
+  revealInFolder: (filePath: string): Promise<void> => 
+    ipcRenderer.invoke('file:revealInFolder', filePath),
+  
+  deleteFile: (filePath: string): Promise<boolean> => 
+    ipcRenderer.invoke('file:deleteFile', filePath),
+
+  // 悬浮预览窗口
+  openFloatingPreview: (filePath: string): Promise<number> => 
+    ipcRenderer.invoke('window:openFloatingPreview', filePath),
+
+  // 移动窗口（用于悬浮窗拖拽）
+  moveWindow: (deltaX: number, deltaY: number): Promise<void> => 
+    ipcRenderer.invoke('window:moveBy', deltaX, deltaY)
 }
 
 // 暴露给渲染进程

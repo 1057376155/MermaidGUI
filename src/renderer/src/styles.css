@@ -33,26 +33,61 @@ body {
 /* 工具栏 */
 .toolbar {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   -webkit-app-region: drag;
+  height: 40px;
+  min-width: 500px; /* 设置工具栏最小宽度 */
 }
 
-.toolbar > * {
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   -webkit-app-region: no-drag;
+  flex-shrink: 0; /* 左侧不压缩 */
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0; /* 右侧不压缩 */
+}
+
+.app-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 4px;
+  flex-shrink: 0;
 }
 
 .current-path {
-  margin-left: auto;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 400px;
+  max-width: 300px;
+  flex-shrink: 1; /* 路径可以压缩 */
 }
 
 /* 按钮 */

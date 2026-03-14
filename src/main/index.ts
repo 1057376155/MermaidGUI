@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { readdir, readFile, stat } from 'fs/promises'
+import { readdir, readFile, stat, unlink } from 'fs/promises'
 import Store from 'electron-store'
 
 // 禁用 macOS 智能缩放和其他触摸手势
@@ -18,9 +18,10 @@ async function createWindow(filePath?: string): Promise<BrowserWindow> {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 600,
+    minHeight: 400,
     show: false,
+    frame: false, // 隐藏默认标题栏，使用自定义标题栏
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -40,6 +41,15 @@ async function createWindow(filePath?: string): Promise<BrowserWindow> {
     if (is.dev) {
       mainWindow.webContents.openDevTools()
     }
+  })
+
+  // 监听最大化状态变化，通知渲染进程
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window:maximized', true)
+  })
+  
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window:maximized', false)
   })
   
   // 确保页面加载后也禁用缩放
@@ -147,6 +157,101 @@ ipcMain.handle('store:getRecentDir', () => {
 ipcMain.handle('window:new', async (_, filePath?: string) => {
   const win = await createWindow(filePath)
   return win.id
+})
+
+// 窗口控制 IPC
+ipcMain.handle('window:minimize', () => {
+  const win = BrowserWindow.getFocusedWindow()
+  if (win) win.minimize()
+})
+
+ipcMain.handle('window:maximize', () => {
+  const win = BrowserWindow.getFocusedWindow()
+  if (win) {
+    if (win.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win.maximize()
+    }
+  }
+})
+
+ipcMain.handle('window:close', () => {
+  const win = BrowserWindow.getFocusedWindow()
+  if (win) win.close()
+})
+
+// 在文件夹中显示文件
+ipcMain.handle('file:revealInFolder', (_, filePath: string) => {
+  shell.showItemInFolder(filePath)
+})
+
+// 删除文件
+ipcMain.handle('file:deleteFile', async (_, filePath: string) => {
+  try {
+    await unlink(filePath)
+    return true
+  } catch (error) {
+    console.error('删除文件失败:', error)
+    return false
+  }
+})
+
+// 悬浮预览窗口集合
+const floatingWindows = new Set<number>()
+
+// 创建悬浮预览窗口
+ipcMain.handle('window:openFloatingPreview', async (_, filePath: string) => {
+  const win = new BrowserWindow({
+    width: 600,
+    height: 500,
+    minWidth: 400,
+    minHeight: 300,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#1e1e1ecc',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+
+  floatingWindows.add(win.id)
+
+  win.on('closed', () => {
+    floatingWindows.delete(win.id)
+  })
+
+  // 加载预览页面
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+    url.hash = `preview=${encodeURIComponent(filePath)}`
+    win.loadURL(url.toString())
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: `preview=${encodeURIComponent(filePath)}`
+    })
+  }
+
+  return win.id
+})
+
+// 移动窗口
+ipcMain.handle('window:moveBy', async (_, deltaX: number, deltaY: number) => {
+  const win = BrowserWindow.getFocusedWindow()
+  if (win && floatingWindows.has(win.id)) {
+    const bounds = win.getBounds()
+    win.setBounds({
+      x: bounds.x + deltaX,
+      y: bounds.y + deltaY,
+      width: bounds.width,
+      height: bounds.height
+    })
+  }
 })
 
 // 应用启动

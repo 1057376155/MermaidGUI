@@ -7,6 +7,14 @@ declare global {
       getRecentDir: () => Promise<string | undefined>
       newWindow: (filePath?: string) => Promise<number>
       onDirectoryOpened: (callback: (dirPath: string) => void) => () => void
+      minimizeWindow: () => Promise<void>
+      maximizeWindow: () => Promise<void>
+      closeWindow: () => Promise<void>
+      onWindowMaximized: (callback: (isMaximized: boolean) => void) => () => void
+      revealInFolder: (filePath: string) => Promise<void>
+      deleteFile: (filePath: string) => Promise<boolean>
+      openFloatingPreview: (filePath: string) => Promise<number>
+      moveWindow: (deltaX: number, deltaY: number) => Promise<void>
     }
   }
 }
