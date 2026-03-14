@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, nextTick, computed } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import mermaid from 'mermaid'
 import hljs from 'highlight.js'
@@ -40,8 +40,12 @@ onMounted(() => {
 const renderer = new marked.Renderer()
 
 // 自定义代码块渲染
-renderer.code = function({ text, lang }) {
-  // 如果是 mermaid 代码块，返回占位符
+renderer.code = function(token: any) {
+  // marked v17: token = { type: 'code', lang?: string, text: string }
+  const text = token.text || ''
+  const lang = token.lang || ''
+  
+  // 只有明确指定 mermaid 或 mmd 语言时才渲染为图表
   if (lang === 'mermaid' || lang === 'mmd') {
     const id = `mermaid-${mermaidCounter++}`
     return `<div class="mermaid-block" data-mermaid-id="${id}" data-mermaid-code="${encodeURIComponent(text)}">
@@ -49,7 +53,7 @@ renderer.code = function({ text, lang }) {
     </div>`
   }
   
-  // 其他代码块使用 highlight.js 高亮
+  // 其他代码块使用 highlight.js 高亮或纯文本显示
   if (lang && hljs.getLanguage(lang)) {
     try {
       const highlighted = hljs.highlight(text, { language: lang }).value
@@ -59,7 +63,7 @@ renderer.code = function({ text, lang }) {
     }
   }
   
-  // 默认转义
+  // 默认显示为纯文本代码块
   const escaped = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -113,16 +117,14 @@ async function renderMermaidBlocks() {
       const id = placeholder.id
       const { svg } = await mermaid.render(id, mermaidCode)
       
-      // 创建包装容器
       const wrapper = document.createElement('div')
       wrapper.className = 'mermaid-svg-wrapper'
       wrapper.innerHTML = svg
       
-      // 替换占位符
       block.innerHTML = ''
       block.appendChild(wrapper)
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Mermaid 渲染失败'
+      const errorMsg = error instanceof Error ? error.message : '渲染失败'
       block.innerHTML = `<div class="mermaid-error">Mermaid 渲染错误: ${errorMsg}</div>`
     }
   }

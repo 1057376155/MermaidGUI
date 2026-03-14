@@ -68,6 +68,7 @@ async function openDirectory() {
 // 选择文件
 async function selectFile(filePath: string) {
   selectedFile.value = filePath
+  fileContent.value = ''  // 先清空内容，避免组件用旧内容渲染
   const content = await window.api.readFile(filePath)
   if (content !== null) {
     fileContent.value = content

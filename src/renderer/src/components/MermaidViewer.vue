@@ -268,7 +268,7 @@ function downloadSvg() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${props.filePath?.split('/').pop()?.replace('.mmd', '') || 'diagram'}.svg`
+  a.download = `${props.filePath?.split('/').pop()?.replace(/\.(mmd|mermaid)$/, '') || 'diagram'}.svg`
   a.click()
   URL.revokeObjectURL(url)
 }
