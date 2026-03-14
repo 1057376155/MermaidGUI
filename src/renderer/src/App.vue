@@ -13,6 +13,8 @@ const selectedFile = ref<string>('')
 const fileContent = ref<string>('')
 const isLoading = ref(false)
 const recentDirsRef = ref<InstanceType<typeof RecentDirs> | null>(null)
+const expandedPaths = ref<Set<string>>(new Set())
+const sidebarCollapsed = ref(false)
 
 // 根据文件扩展名判断文件类型
 const fileType = computed(() => {
@@ -23,14 +25,40 @@ const fileType = computed(() => {
   return null
 })
 
+// 递归加载所有子目录
+async function loadAllSubDirectories(nodes: FileNode[]) {
+  const dirsToLoad = nodes.filter(n => n.type === 'directory')
+  
+  await Promise.all(
+    dirsToLoad.map(async (dir) => {
+      try {
+        const children = await window.api.readTree(dir.path)
+        dir.children = children
+        // 递归加载子目录
+        await loadAllSubDirectories(children)
+      } catch (error) {
+        console.error('加载子目录失败:', dir.path, error)
+      }
+    })
+  )
+}
+
 // 加载目录树（根目录）
 async function loadDirectory(dirPath: string) {
   currentDir.value = dirPath
   isLoading.value = true
   try {
     fileTree.value = await window.api.readTree(dirPath)
+    // 递归加载所有子目录以显示文件数量
+    await loadAllSubDirectories(fileTree.value)
+    // 重新加载已展开的文件夹
+    for (const expandedPath of expandedPaths.value) {
+      await loadChildren(expandedPath)
+    }
     // 刷新历史记录
     recentDirsRef.value?.loadRecentDirs()
+    // 开始监听目录变化
+    await window.api.watchDirectory(dirPath)
   } finally {
     isLoading.value = false
   }
@@ -52,13 +80,64 @@ function findAndUpdateNode(nodes: FileNode[], targetPath: string, newChildren: F
   return false
 }
 
-// 加载子目录
+// 加载子目录（同时递归加载所有子文件夹）
 async function loadChildren(dirPath: string) {
   try {
     const children = await window.api.readTree(dirPath)
+    // 递归加载所有子文件夹
+    await loadAllSubDirectories(children)
     findAndUpdateNode(fileTree.value, dirPath, children)
   } catch (error) {
     console.error('加载子目录失败:', error)
+  }
+}
+
+// 切换文件夹展开状态
+async function toggleExpand(dirPath: string) {
+  if (expandedPaths.value.has(dirPath)) {
+    expandedPaths.value.delete(dirPath)
+  } else {
+    expandedPaths.value.add(dirPath)
+    // 展开时加载子目录
+    await loadChildren(dirPath)
+  }
+}
+
+// 刷新文件树（保持展开状态）
+async function refreshFileTree() {
+  if (!currentDir.value) return
+  isLoading.value = true
+  try {
+    fileTree.value = await window.api.readTree(currentDir.value)
+    // 递归加载所有子目录
+    await loadAllSubDirectories(fileTree.value)
+    // 重新加载已展开的文件夹
+    for (const expandedPath of expandedPaths.value) {
+      await loadChildren(expandedPath)
+    }
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 切换侧边栏折叠状态
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+// 批量加载多个子目录（用于统计文件数量）
+async function loadAllChildren(dirPaths: string[]) {
+  try {
+    await Promise.all(
+      dirPaths.map(async (dirPath) => {
+        const children = await window.api.readTree(dirPath)
+        // 递归加载所有子文件夹
+        await loadAllSubDirectories(children)
+        findAndUpdateNode(fileTree.value, dirPath, children)
+      })
+    )
+  } catch (error) {
+    console.error('批量加载子目录失败:', error)
   }
 }
 
@@ -134,13 +213,22 @@ async function openFloatingPreview(filePath: string) {
 
 // 监听菜单打开目录事件
 let unsubscribe: (() => void) | undefined
+let unsubscribeDirChanged: (() => void) | undefined
 
 onMounted(async () => {
   // 监听目录打开事件
   unsubscribe = window.api.onDirectoryOpened((dirPath) => {
     loadDirectory(dirPath)
   })
-  
+
+  // 监听目录变化事件
+  unsubscribeDirChanged = window.api.onDirectoryChanged(() => {
+    // 刷新当前目录
+    if (currentDir.value) {
+      loadDirectory(currentDir.value)
+    }
+  })
+
   // 尝试加载最近打开的目录
   const recentDir = await window.api.getRecentDir()
   if (recentDir) {
@@ -150,6 +238,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   unsubscribe?.()
+  unsubscribeDirChanged?.()
+  // 停止监听文件变化
+  window.api.unwatchDirectory()
 })
 </script>
 
@@ -179,29 +270,42 @@ onUnmounted(() => {
     <!-- 主内容区 -->
     <main class="main-content">
       <!-- 左侧文件树 -->
-      <aside class="sidebar">
+      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-header">
-          <h3>文件列表</h3>
+          <h3 v-if="!sidebarCollapsed">文件列表</h3>
+          <div class="sidebar-actions">
+            <button v-if="!sidebarCollapsed" class="sidebar-btn" @click="refreshFileTree" title="刷新">
+              🔄
+            </button>
+            <button class="sidebar-btn" @click="toggleSidebar" :title="sidebarCollapsed ? '展开' : '收起'">
+              {{ sidebarCollapsed ? '▶' : '◀' }}
+            </button>
+          </div>
+        </div>
+        <template v-if="!sidebarCollapsed">
           <span v-if="isLoading" class="loading">加载中...</span>
-        </div>
-        <FileTree
-          v-if="fileTree.length > 0"
-          :nodes="fileTree"
-          :selected="selectedFile"
-          @select="selectFile"
-          @open-new-window="openInNewWindow"
-          @load-children="loadChildren"
-          @copy-path="copyPath"
-          @delete-file="deleteFile"
-          @reveal-in-folder="revealInFolder"
-          @open-floating-preview="openFloatingPreview"
-        />
-        <div v-else class="empty-state">
-          <p>请打开一个包含 .mmd 或 .md 文件的目录</p>
-        </div>
-        
-        <!-- 最近打开的历史记录 -->
-        <RecentDirs ref="recentDirsRef" />
+          <FileTree
+            v-if="fileTree.length > 0"
+            :nodes="fileTree"
+            :selected="selectedFile"
+            :expanded-paths="expandedPaths"
+            @select="selectFile"
+            @open-new-window="openInNewWindow"
+            @load-children="loadChildren"
+            @load-all-children="loadAllChildren"
+            @copy-path="copyPath"
+            @delete-file="deleteFile"
+            @reveal-in-folder="revealInFolder"
+            @open-floating-preview="openFloatingPreview"
+            @toggle-expand="toggleExpand"
+          />
+          <div v-else class="empty-state">
+            <p>请打开一个包含 .mmd 或 .md 文件的目录</p>
+          </div>
+          
+          <!-- 最近打开的历史记录 -->
+          <RecentDirs ref="recentDirsRef" />
+        </template>
       </aside>
 
       <!-- 右侧渲染区 -->

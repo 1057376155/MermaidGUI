@@ -73,7 +73,19 @@ const api = {
     ipcRenderer.invoke('store:getRecentDirs'),
   
   openFromHistory: (dirPath: string): Promise<number> => 
-    ipcRenderer.invoke('window:openFromHistory', dirPath)
+    ipcRenderer.invoke('window:openFromHistory', dirPath),
+
+  // 文件监听
+  watchDirectory: (dirPath: string): Promise<void> => 
+    ipcRenderer.invoke('file:watchDirectory', dirPath),
+  
+  unwatchDirectory: (): Promise<void> => 
+    ipcRenderer.invoke('file:unwatchDirectory'),
+  
+  onDirectoryChanged: (callback: (dirPath: string) => void) => {
+    ipcRenderer.on('directory:changed', (_, dirPath) => callback(dirPath))
+    return () => ipcRenderer.removeAllListeners('directory:changed')
+  }
 }
 
 // 暴露给渲染进程

@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { readdir, readFile, stat, unlink } from 'fs/promises'
+import { watch, FSWatcher } from 'fs'
 import Store from 'electron-store'
 
 // 禁用 macOS 智能缩放和其他触摸手势
@@ -36,6 +37,47 @@ function addRecentDir(dirPath: string) {
 
 // 窗口管理
 const windows = new Map<string, BrowserWindow>()
+
+// 文件监听器管理（窗口ID -> 监听器）
+const watchers = new Map<number, FSWatcher>()
+
+// 防抖定时器
+let debounceTimer: NodeJS.Timeout | null = null
+
+// 开始监听目录变化
+function startWatching(win: BrowserWindow, dirPath: string) {
+  // 先停止之前的监听
+  stopWatching(win.id)
+
+  try {
+    // 使用 recursive: true 递归监听整个目录树（macOS/Windows 支持）
+    const watcher = watch(dirPath, { persistent: true, recursive: true }, (eventType, filename) => {
+      // 忽略隐藏文件和 node_modules
+      if (filename && !filename.startsWith('.') && !filename.includes('node_modules')) {
+        // 防抖：300ms 内只触发一次刷新
+        if (debounceTimer) {
+          clearTimeout(debounceTimer)
+        }
+        debounceTimer = setTimeout(() => {
+          win.webContents.send('directory:changed', dirPath)
+          debounceTimer = null
+        }, 300)
+      }
+    })
+    watchers.set(win.id, watcher)
+  } catch (error) {
+    console.error('监听目录失败:', dirPath, error)
+  }
+}
+
+// 停止监听
+function stopWatching(winId: number) {
+  const watcher = watchers.get(winId)
+  if (watcher) {
+    watcher.close()
+    watchers.delete(winId)
+  }
+}
 
 async function createWindow(filePath?: string): Promise<BrowserWindow> {
   const mainWindow = new BrowserWindow({
@@ -73,6 +115,11 @@ async function createWindow(filePath?: string): Promise<BrowserWindow> {
   
   mainWindow.on('unmaximize', () => {
     mainWindow.webContents.send('window:maximized', false)
+  })
+
+  // 窗口关闭时停止监听文件变化
+  mainWindow.on('closed', () => {
+    stopWatching(mainWindow.id)
   })
   
   // 确保页面加载后也禁用缩放
@@ -160,6 +207,22 @@ ipcMain.handle('file:readTree', async (_, dirPath: string) => {
   } catch (error) {
     console.error('读取目录失败:', error)
     return []
+  }
+})
+
+// 开始监听目录变化
+ipcMain.handle('file:watchDirectory', (event, dirPath: string) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win) {
+    startWatching(win, dirPath)
+  }
+})
+
+// 停止监听目录变化
+ipcMain.handle('file:unwatchDirectory', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win) {
+    stopWatching(win.id)
   }
 })
 

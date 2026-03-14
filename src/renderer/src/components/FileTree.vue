@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { FileNode } from '../env.d'
 import ContextMenu from './ContextMenu.vue'
 import type { MenuItem } from './ContextMenu.vue'
@@ -8,6 +8,7 @@ const props = defineProps<{
   nodes: FileNode[]
   selected?: string
   level?: number
+  expandedPaths?: Set<string>
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +19,8 @@ const emit = defineEmits<{
   'delete-file': [path: string]
   'reveal-in-folder': [path: string]
   'open-floating-preview': [path: string]
+  'load-all-children': [paths: string[]]
+  'toggle-expand': [path: string]
 }>()
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -98,23 +101,13 @@ const dirMenuItems: MenuItem[] = [
   }
 ]
 
-const expanded = ref<Set<string>>(new Set())
 const loading = ref<Set<string>>(new Set())
 
+// 使用 props 中的 expandedPaths，如果没有则使用本地状态
+const expanded = computed(() => props.expandedPaths ?? new Set<string>())
+
 async function toggleExpand(node: FileNode) {
-  const path = node.path
-  
-  if (expanded.value.has(path)) {
-    expanded.value.delete(path)
-  } else {
-    // 如果子节点未加载，先加载
-    if (node.type === 'directory' && (!node.children || node.children.length === 0)) {
-      loading.value.add(path)
-      emit('load-children', path)
-      // 等待加载完成（通过 watch 或其他方式）
-    }
-    expanded.value.add(path)
-  }
+  emit('toggle-expand', node.path)
 }
 
 function handleClick(node: FileNode, event: MouseEvent) {
@@ -138,6 +131,25 @@ function getFileIcon(node: FileNode): string {
   if (ext === 'md') return '📝'
   if (ext === 'mmd' || ext === 'mermaid') return '📊'
   return '📄'
+}
+
+// 计算子文件夹中的文件数量（遍历第一层子文件夹）
+function getFileCount(node: FileNode): number {
+  if (node.type !== 'directory' || !node.children || node.children.length === 0) {
+    return 0
+  }
+  let count = 0
+  for (const child of node.children) {
+    if (child.type === 'file') {
+      count++
+    }
+  }
+  return count
+}
+
+// 检查文件夹是否需要加载子内容来显示数量
+function needsLoadChildren(node: FileNode): boolean {
+  return node.type === 'directory' && !node.children
 }
 
 // 暴露方法让父组件可以更新加载状态
@@ -187,6 +199,12 @@ const level = props.level ?? 0
         
         <!-- 名称 -->
         <span class="node-name">{{ node.name }}</span>
+        <!-- 文件数量（仅对含有文件的文件夹显示） -->
+        <span v-if="node.type === 'directory' && node.children && getFileCount(node) > 0" class="file-count">
+          {{ getFileCount(node) }}
+        </span>
+        <!-- 加载中状态（需要加载子内容时显示） -->
+        <span v-else-if="node.type === 'directory' && needsLoadChildren(node)" class="loading-dots">...</span>
       </div>
       
       <!-- 子节点 -->
@@ -195,13 +213,16 @@ const level = props.level ?? 0
           :nodes="node.children"
           :selected="selected"
           :level="level + 1"
+          :expanded-paths="expandedPaths"
           @select="(path) => emit('select', path)"
           @open-new-window="(path) => emit('open-new-window', path)"
           @load-children="(path) => emit('load-children', path)"
+          @load-all-children="(paths) => emit('load-all-children', paths)"
           @copy-path="(path) => emit('copy-path', path)"
           @delete-file="(path) => emit('delete-file', path)"
           @reveal-in-folder="(path) => emit('reveal-in-folder', path)"
           @open-floating-preview="(path) => emit('open-floating-preview', path)"
+          @toggle-expand="(path) => emit('toggle-expand', path)"
         />
       </div>
     </li>
@@ -210,3 +231,17 @@ const level = props.level ?? 0
   <!-- 右键菜单 -->
   <ContextMenu ref="contextMenuRef" :items="contextMenuTarget && nodes.find(n => n.path === contextMenuTarget)?.type === 'directory' ? dirMenuItems : fileMenuItems" />
 </template>
+
+<style scoped>
+.file-count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.loading-dots {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+</style>

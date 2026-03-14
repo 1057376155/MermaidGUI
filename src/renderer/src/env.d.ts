@@ -17,6 +17,9 @@ declare global {
       moveWindow: (deltaX: number, deltaY: number) => Promise<void>
       getRecentDirs: () => Promise<string[]>
       openFromHistory: (dirPath: string) => Promise<number>
+      watchDirectory: (dirPath: string) => Promise<void>
+      unwatchDirectory: () => Promise<void>
+      onDirectoryChanged: (callback: (dirPath: string) => void) => () => void
     }
   }
 }
