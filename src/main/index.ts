@@ -73,10 +73,8 @@ interface FileNode {
   children?: FileNode[]
 }
 
-// 递归读取目录结构
-async function readDirectory(dirPath: string, maxDepth = 3, currentDepth = 0): Promise<FileNode[]> {
-  if (currentDepth >= maxDepth) return []
-
+// 读取单层目录结构（按需加载）
+async function readDirectory(dirPath: string): Promise<FileNode[]> {
   const entries = await readdir(dirPath, { withFileTypes: true })
   const nodes: FileNode[] = []
 
@@ -87,14 +85,13 @@ async function readDirectory(dirPath: string, maxDepth = 3, currentDepth = 0): P
     const fullPath = join(dirPath, entry.name)
     
     if (entry.isDirectory()) {
-      const children = await readDirectory(fullPath, maxDepth, currentDepth + 1)
       nodes.push({
         name: entry.name,
         path: fullPath,
         type: 'directory',
-        children
+        children: [] // 子节点按需加载
       })
-    } else if (entry.isFile() && (entry.name.endsWith('.mmd') || entry.name.endsWith('.mermaid'))) {
+    } else if (entry.isFile() && (entry.name.endsWith('.mmd') || entry.name.endsWith('.mermaid') || entry.name.endsWith('.md'))) {
       nodes.push({
         name: entry.name,
         path: fullPath,

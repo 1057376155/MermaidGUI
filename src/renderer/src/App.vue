@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import FileTree from './components/FileTree.vue'
 import MermaidViewer from './components/MermaidViewer.vue'
+import MarkdownViewer from './components/MarkdownViewer.vue'
 import type { FileNode } from '../env.d'
 
 const currentDir = ref<string>('')
@@ -10,7 +11,16 @@ const selectedFile = ref<string>('')
 const fileContent = ref<string>('')
 const isLoading = ref(false)
 
-// 加载目录树
+// 根据文件扩展名判断文件类型
+const fileType = computed(() => {
+  if (!selectedFile.value) return null
+  const ext = selectedFile.value.split('.').pop()?.toLowerCase()
+  if (ext === 'md') return 'markdown'
+  if (ext === 'mmd' || ext === 'mermaid') return 'mermaid'
+  return null
+})
+
+// 加载目录树（根目录）
 async function loadDirectory(dirPath: string) {
   currentDir.value = dirPath
   isLoading.value = true
@@ -18,6 +28,32 @@ async function loadDirectory(dirPath: string) {
     fileTree.value = await window.api.readTree(dirPath)
   } finally {
     isLoading.value = false
+  }
+}
+
+// 递归查找并更新节点
+function findAndUpdateNode(nodes: FileNode[], targetPath: string, newChildren: FileNode[]): boolean {
+  for (const node of nodes) {
+    if (node.path === targetPath) {
+      node.children = newChildren
+      return true
+    }
+    if (node.children && node.children.length > 0) {
+      if (findAndUpdateNode(node.children, targetPath, newChildren)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// 加载子目录
+async function loadChildren(dirPath: string) {
+  try {
+    const children = await window.api.readTree(dirPath)
+    findAndUpdateNode(fileTree.value, dirPath, children)
+  } catch (error) {
+    console.error('加载子目录失败:', error)
   }
 }
 
@@ -93,23 +129,29 @@ onUnmounted(() => {
           :selected="selectedFile"
           @select="selectFile"
           @open-new-window="openInNewWindow"
+          @load-children="loadChildren"
         />
         <div v-else class="empty-state">
-          <p>请打开一个包含 .mmd 文件的目录</p>
+          <p>请打开一个包含 .mmd 或 .md 文件的目录</p>
         </div>
       </aside>
 
       <!-- 右侧渲染区 -->
       <section class="viewer">
         <MermaidViewer
-          v-if="fileContent"
+          v-if="fileContent && fileType === 'mermaid'"
+          :content="fileContent"
+          :file-path="selectedFile"
+        />
+        <MarkdownViewer
+          v-else-if="fileContent && fileType === 'markdown'"
           :content="fileContent"
           :file-path="selectedFile"
         />
         <div v-else class="empty-viewer">
           <div class="placeholder">
             <span class="icon-large">📊</span>
-            <p>选择一个 .mmd 文件查看渲染结果</p>
+            <p>选择一个 .mmd 或 .md 文件查看渲染结果</p>
           </div>
         </div>
       </section>

@@ -15,7 +15,7 @@ const api = {
   openDirectory: (): Promise<string | null> => 
     ipcRenderer.invoke('dialog:openDirectory'),
   
-  // 读取目录树
+  // 读取目录树（单层）
   readTree: (dirPath: string): Promise<FileNode[]> => 
     ipcRenderer.invoke('file:readTree', dirPath),
   
