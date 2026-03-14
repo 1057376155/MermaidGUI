@@ -36,7 +36,6 @@ async function createWindow(filePath?: string): Promise<BrowserWindow> {
     mainWindow.show()
     // 禁用视觉缩放（包括双指双击智能缩放）
     mainWindow.webContents.setVisualZoomLevelLimits(1, 1)
-    mainWindow.webContents.setLayoutZoomLevelLimits(0, 0)
     // 开发模式下自动打开开发者工具
     if (is.dev) {
       mainWindow.webContents.openDevTools()
@@ -46,7 +45,6 @@ async function createWindow(filePath?: string): Promise<BrowserWindow> {
   // 确保页面加载后也禁用缩放
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.setVisualZoomLevelLimits(1, 1)
-    mainWindow.webContents.setLayoutZoomLevelLimits(0, 0)
     mainWindow.webContents.setZoomFactor(1)
   })
 
