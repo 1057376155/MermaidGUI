@@ -66,7 +66,14 @@ const api = {
 
   // 移动窗口（用于悬浮窗拖拽）
   moveWindow: (deltaX: number, deltaY: number): Promise<void> => 
-    ipcRenderer.invoke('window:moveBy', deltaX, deltaY)
+    ipcRenderer.invoke('window:moveBy', deltaX, deltaY),
+
+  // 历史目录
+  getRecentDirs: (): Promise<string[]> => 
+    ipcRenderer.invoke('store:getRecentDirs'),
+  
+  openFromHistory: (dirPath: string): Promise<number> => 
+    ipcRenderer.invoke('window:openFromHistory', dirPath)
 }
 
 // 暴露给渲染进程

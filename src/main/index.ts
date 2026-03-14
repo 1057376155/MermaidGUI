@@ -9,7 +9,30 @@ app.commandLine.appendSwitch('disable-pinch')
 app.commandLine.appendSwitch('disable-features', 'TouchpadAndWheelScrollLatching')
 
 // 存储最近打开的目录
-const store = new Store<{ recentDir: string }>()
+const store = new Store<{ recentDir: string; recentDirs: string[] }>()
+
+// 最大历史记录数
+const MAX_RECENT_DIRS = 10
+
+// 获取历史记录列表
+function getRecentDirs(): string[] {
+  return store.get('recentDirs', [])
+}
+
+// 添加目录到历史记录
+function addRecentDir(dirPath: string) {
+  if (!dirPath) return
+  let dirs = getRecentDirs()
+  // 移除已存在的相同路径
+  dirs = dirs.filter(d => d !== dirPath)
+  // 添加到开头
+  dirs.unshift(dirPath)
+  // 限制数量
+  dirs = dirs.slice(0, MAX_RECENT_DIRS)
+  store.set('recentDirs', dirs)
+  // 同时更新最近一个
+  store.set('recentDir', dirPath)
+}
 
 // 窗口管理
 const windows = new Map<string, BrowserWindow>()
@@ -122,10 +145,10 @@ ipcMain.handle('dialog:openDirectory', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory']
   })
-  
+
   if (result.filePaths.length > 0) {
     const dir = result.filePaths[0]
-    store.set('recentDir', dir)
+    addRecentDir(dir)
     return dir
   }
   return null
@@ -151,6 +174,21 @@ ipcMain.handle('file:readContent', async (_, filePath: string) => {
 
 ipcMain.handle('store:getRecentDir', () => {
   return store.get('recentDir')
+})
+
+// 获取历史目录列表
+ipcMain.handle('store:getRecentDirs', () => {
+  return getRecentDirs()
+})
+
+// 从历史记录打开目录（在新窗口）
+ipcMain.handle('window:openFromHistory', async (_, dirPath: string) => {
+  const win = await createWindow()
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send('directory:opened', dirPath)
+  })
+  addRecentDir(dirPath)
+  return win.id
 })
 
 // 创建新窗口

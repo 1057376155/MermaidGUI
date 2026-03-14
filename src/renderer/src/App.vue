@@ -4,6 +4,7 @@ import TitleBar from './components/TitleBar.vue'
 import FileTree from './components/FileTree.vue'
 import MermaidViewer from './components/MermaidViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
+import RecentDirs from './components/RecentDirs.vue'
 import type { FileNode } from '../env.d'
 
 const currentDir = ref<string>('')
@@ -11,6 +12,7 @@ const fileTree = ref<FileNode[]>([])
 const selectedFile = ref<string>('')
 const fileContent = ref<string>('')
 const isLoading = ref(false)
+const recentDirsRef = ref<InstanceType<typeof RecentDirs> | null>(null)
 
 // 根据文件扩展名判断文件类型
 const fileType = computed(() => {
@@ -27,6 +29,8 @@ async function loadDirectory(dirPath: string) {
   isLoading.value = true
   try {
     fileTree.value = await window.api.readTree(dirPath)
+    // 刷新历史记录
+    recentDirsRef.value?.loadRecentDirs()
   } finally {
     isLoading.value = false
   }
@@ -195,6 +199,9 @@ onUnmounted(() => {
         <div v-else class="empty-state">
           <p>请打开一个包含 .mmd 或 .md 文件的目录</p>
         </div>
+        
+        <!-- 最近打开的历史记录 -->
+        <RecentDirs ref="recentDirsRef" />
       </aside>
 
       <!-- 右侧渲染区 -->

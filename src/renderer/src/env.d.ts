@@ -15,6 +15,8 @@ declare global {
       deleteFile: (filePath: string) => Promise<boolean>
       openFloatingPreview: (filePath: string) => Promise<number>
       moveWindow: (deltaX: number, deltaY: number) => Promise<void>
+      getRecentDirs: () => Promise<string[]>
+      openFromHistory: (dirPath: string) => Promise<number>
     }
   }
 }
