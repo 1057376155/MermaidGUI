@@ -41,11 +41,30 @@ const isMacOS = computed(() => {
          navigator.userAgent.toLowerCase().includes('mac')
 })
 
+// 可用主题列表（包含背景色）
+const themes = [
+  { value: 'default', label: '默认', bgColor: '#ffffff' },
+  { value: 'neutral', label: '中性', bgColor: '#f9f9f9' },
+  { value: 'dark', label: '深色', bgColor: '#1a1a2e' },
+  { value: 'forest', label: '森林', bgColor: '#f0f8f0' },
+  { value: 'base', label: '基础', bgColor: '#f4f4f4' }
+]
+
+// 从 localStorage 读取保存的主题
+const savedTheme = localStorage.getItem('mermaid-theme')
+const currentTheme = ref(savedTheme || 'default')
+
+// 当前主题的背景色
+const currentBgColor = computed(() => {
+  const theme = themes.find(t => t.value === currentTheme.value)
+  return theme?.bgColor || '#ffffff'
+})
+
 // 初始化 mermaid
-onMounted(() => {
+function initMermaid() {
   mermaid.initialize({
     startOnLoad: false,
-    theme: 'default',
+    theme: currentTheme.value,
     securityLevel: 'loose',
     flowchart: {
       useMaxWidth: false,
@@ -58,7 +77,22 @@ onMounted(() => {
       useMaxWidth: false
     }
   })
+}
+
+onMounted(() => {
+  initMermaid()
 })
+
+// 切换主题
+async function changeTheme(theme: string) {
+  currentTheme.value = theme
+  // 保存到 localStorage
+  localStorage.setItem('mermaid-theme', theme)
+  // 重新初始化 mermaid
+  initMermaid()
+  // 重新渲染
+  await renderMermaid()
+}
 
 // 渲染 mermaid 图表
 async function renderMermaid() {
@@ -304,6 +338,11 @@ onMounted(() => {
     <div class="viewer-toolbar">
       <span class="file-name">{{ filePath?.split('/').pop() }}</span>
       <div class="toolbar-actions">
+        <!-- 主题选择 -->
+        <select v-model="currentTheme" @change="changeTheme(currentTheme)" class="theme-select" title="选择主题">
+          <option v-for="t in themes" :key="t.value" :value="t.value">{{ t.label }}</option>
+        </select>
+        <div class="toolbar-divider"></div>
         <!-- 缩放控制 -->
         <div class="zoom-controls">
           <button class="btn-small" @click="zoomOut" title="缩小">
@@ -334,6 +373,7 @@ onMounted(() => {
     <div 
       ref="containerRef" 
       class="mermaid-container"
+      :style="{ backgroundColor: currentBgColor }"
       @wheel="handleWheel"
       @mousedown="handleMouseDown"
     >
@@ -406,12 +446,31 @@ onMounted(() => {
   margin: 0 4px;
 }
 
+.theme-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.theme-select:hover {
+  border-color: var(--accent-color);
+}
+
+.theme-select:focus {
+  border-color: var(--accent-color);
+}
+
 .mermaid-container {
   flex: 1;
   overflow: hidden;
   position: relative;
   cursor: grab;
-  background: var(--bg-primary);
+  transition: background-color 0.3s ease;
 }
 
 .mermaid-container:active {
