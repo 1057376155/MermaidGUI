@@ -100,7 +100,14 @@ const api = {
 
   // 搜索文件内容
   searchInFiles: (dirPath: string, query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }): Promise<SearchResult[]> => 
-    ipcRenderer.invoke('file:search', dirPath, query, options)
+    ipcRenderer.invoke('file:search', dirPath, query, options),
+
+  // 搜索历史
+  getSearchHistory: (): Promise<string[]> => 
+    ipcRenderer.invoke('store:getSearchHistory'),
+  
+  clearSearchHistory: (): Promise<void> => 
+    ipcRenderer.invoke('store:clearSearchHistory')
 }
 
 // 暴露给渲染进程

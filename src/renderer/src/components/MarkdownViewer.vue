@@ -9,6 +9,7 @@ const props = defineProps<{
   filePath?: string
   highlightLine?: number
   highlightText?: string
+  highlightKey?: number
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -139,54 +140,95 @@ watch(() => props.content, () => {
 
 // 滚动到并高亮指定文本
 function scrollToHighlight() {
-  if (!containerRef.value || !props.highlightText) return
+  if (!containerRef.value) return
 
-  // 使用 TreeWalker 查找包含目标文本的元素
+  // 先移除之前的高亮
+  const prevHighlighted = containerRef.value.querySelectorAll('.search-highlight-element')
+  prevHighlighted.forEach(el => el.classList.remove('search-highlight-element'))
+
+  if (!props.highlightText) return
+
+  // 收集所有包含目标文本的元素及其位置
+  const matches: { element: Element; offsetTop: number }[] = []
   const walker = document.createTreeWalker(
     containerRef.value,
     NodeFilter.SHOW_TEXT,
     null
   )
 
-  let found = false
   let node: Text | null
   while ((node = walker.nextNode() as Text | null)) {
     const text = node.textContent || ''
-    const index = text.indexOf(props.highlightText)
-    if (index !== -1) {
-      found = true
+    if (text.includes(props.highlightText)) {
       const parent = node.parentElement
       if (parent) {
-        // 滚动到元素
-        parent.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-        // 添加高亮效果
-        parent.classList.add('search-highlight-element')
-
-        // 3秒后移除高亮
-        setTimeout(() => {
-          parent.classList.remove('search-highlight-element')
-        }, 3000)
+        matches.push({
+          element: parent,
+          offsetTop: parent.getBoundingClientRect().top - containerRef.value.getBoundingClientRect().top + containerRef.value.scrollTop
+        })
       }
-      break
     }
   }
 
-  if (!found) {
-    // 如果精确匹配失败，尝试滚动到大概位置（基于行号估算）
+  if (matches.length === 0) {
+    // 没有找到匹配，根据行号估算滚动
     if (props.highlightLine && props.highlightLine > 0) {
-      // 估算滚动位置
-      const avgLineHeight = 24 // 估算的行高
+      const avgLineHeight = 24
       const scrollPosition = (props.highlightLine - 10) * avgLineHeight
-      if (containerRef.value) {
-        containerRef.value.scrollTop = Math.max(0, scrollPosition)
+      containerRef.value.scrollTop = Math.max(0, scrollPosition)
+    }
+    return
+  }
+
+  // 如果只有一个匹配，直接跳转
+  if (matches.length === 1) {
+    highlightElement(matches[0].element)
+    return
+  }
+
+  // 多个匹配时，根据行号估算应该跳到哪个
+  if (props.highlightLine && props.highlightLine > 0) {
+    // 估算目标滚动位置
+    const avgLineHeight = 24
+    const estimatedScrollTop = (props.highlightLine - 10) * avgLineHeight
+
+    // 找到最接近估算位置的匹配
+    let closestMatch = matches[0]
+    let minDistance = Math.abs(matches[0].offsetTop - estimatedScrollTop)
+
+    for (const match of matches) {
+      const distance = Math.abs(match.offsetTop - estimatedScrollTop)
+      if (distance < minDistance) {
+        minDistance = distance
+        closestMatch = match
       }
     }
+
+    highlightElement(closestMatch.element)
+  } else {
+    // 没有行号信息，跳转到第一个匹配
+    highlightElement(matches[0].element)
   }
 }
 
-// 监听高亮文本变化
-watch(() => props.highlightText, () => {
+// 高亮元素并滚动
+function highlightElement(element: Element) {
+  if (!containerRef.value) return
+
+  // 滚动到元素
+  element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+  // 添加高亮效果
+  element.classList.add('search-highlight-element')
+
+  // 3秒后移除高亮
+  setTimeout(() => {
+    element.classList.remove('search-highlight-element')
+  }, 3000)
+}
+
+// 监听高亮 key 变化（每次点击都会更新 key）
+watch(() => props.highlightKey, () => {
   nextTick(() => {
     setTimeout(scrollToHighlight, 100)
   })

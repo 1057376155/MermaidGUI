@@ -21,6 +21,8 @@ declare global {
       unwatchDirectory: () => Promise<void>
       onDirectoryChanged: (callback: (dirPath: string) => void) => () => void
       searchInFiles: (dirPath: string, query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }) => Promise<SearchResult[]>
+      getSearchHistory: () => Promise<string[]>
+      clearSearchHistory: () => Promise<void>
     }
   }
 }

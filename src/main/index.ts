@@ -20,11 +20,12 @@ interface SearchResult {
 app.commandLine.appendSwitch('disable-pinch')
 app.commandLine.appendSwitch('disable-features', 'TouchpadAndWheelScrollLatching')
 
-// 存储最近打开的目录
-const store = new Store<{ recentDir: string; recentDirs: string[] }>()
+// 存储最近打开的目录和搜索历史
+const store = new Store<{ recentDir: string; recentDirs: string[]; searchHistory: string[] }>()
 
 // 最大历史记录数
 const MAX_RECENT_DIRS = 10
+const MAX_SEARCH_HISTORY = 20
 
 // 获取历史记录列表
 function getRecentDirs(): string[] {
@@ -44,6 +45,29 @@ function addRecentDir(dirPath: string) {
   store.set('recentDirs', dirs)
   // 同时更新最近一个
   store.set('recentDir', dirPath)
+}
+
+// 获取搜索历史
+function getSearchHistory(): string[] {
+  return store.get('searchHistory', [])
+}
+
+// 添加搜索历史
+function addSearchHistory(query: string) {
+  if (!query.trim()) return
+  let history = getSearchHistory()
+  // 移除已存在的相同查询
+  history = history.filter(h => h !== query)
+  // 添加到开头
+  history.unshift(query)
+  // 限制数量
+  history = history.slice(0, MAX_SEARCH_HISTORY)
+  store.set('searchHistory', history)
+}
+
+// 清空搜索历史
+function clearSearchHistory() {
+  store.set('searchHistory', [])
 }
 
 // 窗口管理
@@ -307,6 +331,8 @@ ipcMain.handle('file:readContent', async (_, filePath: string) => {
 ipcMain.handle('file:search', async (_, dirPath: string, query: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }) => {
   try {
     if (!query.trim()) return []
+    // 保存搜索历史
+    addSearchHistory(query)
     return await searchInDirectory(dirPath, query, {
       caseSensitive: options?.caseSensitive ?? false,
       wholeWord: options?.wholeWord ?? false
@@ -315,6 +341,16 @@ ipcMain.handle('file:search', async (_, dirPath: string, query: string, options?
     console.error('搜索失败:', error)
     return []
   }
+})
+
+// 获取搜索历史
+ipcMain.handle('store:getSearchHistory', () => {
+  return getSearchHistory()
+})
+
+// 清空搜索历史
+ipcMain.handle('store:clearSearchHistory', () => {
+  clearSearchHistory()
 })
 
 ipcMain.handle('store:getRecentDir', () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import type { SearchResult } from '../env.d'
 
 const props = defineProps<{
@@ -17,6 +17,8 @@ const isSearching = ref(false)
 const caseSensitive = ref(false)
 const wholeWord = ref(false)
 const selectedIndex = ref(-1)
+const searchHistory = ref<string[]>([])
+const showHistory = ref(true)
 
 // 按文件分组的结果
 const groupedResults = computed(() => {
@@ -28,6 +30,35 @@ const groupedResults = computed(() => {
     groups.get(result.filePath)!.push(result)
   }
   return groups
+})
+
+// 加载搜索历史
+async function loadSearchHistory() {
+  try {
+    searchHistory.value = await window.api.getSearchHistory()
+  } catch (error) {
+    console.error('加载搜索历史失败:', error)
+  }
+}
+
+// 清空搜索历史
+async function clearHistory() {
+  try {
+    await window.api.clearSearchHistory()
+    searchHistory.value = []
+  } catch (error) {
+    console.error('清空搜索历史失败:', error)
+  }
+}
+
+// 使用历史记录
+function useHistoryItem(query: string) {
+  searchQuery.value = query
+  showHistory.value = false
+}
+
+onMounted(() => {
+  loadSearchHistory()
 })
 
 // 搜索防抖
@@ -49,6 +80,7 @@ async function performSearch() {
     return
   }
 
+  showHistory.value = false
   isSearching.value = true
   selectedIndex.value = -1
 
@@ -62,6 +94,8 @@ async function performSearch() {
       }
     )
     searchResults.value = results
+    // 重新加载历史记录（搜索时会自动保存）
+    await loadSearchHistory()
   } catch (error) {
     console.error('搜索失败:', error)
     searchResults.value = []
@@ -116,6 +150,14 @@ function clearSearch() {
   searchQuery.value = ''
   searchResults.value = []
   selectedIndex.value = -1
+  showHistory.value = true
+}
+
+// 输入框获得焦点时显示历史
+function handleFocus() {
+  if (!searchQuery.value && searchHistory.value.length > 0) {
+    showHistory.value = true
+  }
 }
 </script>
 
@@ -134,6 +176,7 @@ function clearSearch() {
           class="search-input"
           placeholder="搜索文档内容..."
           @keydown="handleKeydown"
+          @focus="handleFocus"
         />
         <button v-if="searchQuery" class="clear-btn" @click="clearSearch" title="清空">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -174,6 +217,30 @@ function clearSearch() {
         搜索中...
       </div>
 
+      <!-- 搜索历史 -->
+      <div v-else-if="showHistory && searchHistory.length > 0 && !searchQuery" class="history-section">
+        <div class="history-header">
+          <span class="history-title">搜索历史</span>
+          <button class="clear-history-btn" @click="clearHistory" title="清空历史">
+            清空
+          </button>
+        </div>
+        <div class="history-list">
+          <div
+            v-for="(item, index) in searchHistory"
+            :key="index"
+            class="history-item"
+            @click="useHistoryItem(item)"
+          >
+            <svg class="history-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12,6 12,12 16,14"/>
+            </svg>
+            <span class="history-text">{{ item }}</span>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="searchQuery && searchResults.length === 0" class="search-status empty">
         未找到匹配结果
       </div>
@@ -207,7 +274,7 @@ function clearSearch() {
         </template>
       </div>
 
-      <div v-else class="search-hint">
+      <div v-else-if="!showHistory || searchHistory.length === 0" class="search-hint">
         输入关键词搜索文档内容
       </div>
     </div>
@@ -367,6 +434,70 @@ function clearSearch() {
   padding: 20px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* 搜索历史样式 */
+.history-section {
+  padding: 8px 0;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.history-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.clear-history-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.clear-history-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.history-list {
+  padding: 4px 0;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+}
+
+.history-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.history-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .results-list {

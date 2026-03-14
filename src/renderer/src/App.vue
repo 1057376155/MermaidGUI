@@ -21,6 +21,7 @@ const sidebarCollapsed = ref(false)
 const showSearch = ref(false)
 const highlightLine = ref<number | undefined>(undefined)
 const highlightText = ref<string | undefined>(undefined)
+const highlightKey = ref(0) // 用于强制触发更新
 const markdownViewerRef = ref<InstanceType<typeof MarkdownViewer> | null>(null)
 
 // 根据文件扩展名判断文件类型
@@ -229,23 +230,25 @@ function toggleSearch() {
 
 // 处理搜索结果选择
 async function handleSearchResult(result: SearchResult) {
+  const isNewFile = selectedFile.value !== result.filePath
+
   // 如果不是当前文件，先加载文件
-  if (selectedFile.value !== result.filePath) {
+  if (isNewFile) {
     await selectFile(result.filePath)
   }
 
-  // 设置高亮信息
+  // 设置高亮信息，并更新 key 强制触发响应
   highlightLine.value = result.lineNumber
   highlightText.value = result.lineContent.slice(result.matchStart, result.matchEnd)
+  highlightKey.value++
 
-  // 关闭搜索面板
-  showSearch.value = false
+  // 保持搜索面板打开，不关闭
 
   // 等待渲染完成后滚动到高亮位置
   await nextTick()
   setTimeout(() => {
     markdownViewerRef.value?.scrollToHighlight()
-  }, 200)
+  }, isNewFile ? 300 : 100)
 }
 
 // 监听菜单打开目录事件
@@ -398,6 +401,7 @@ function handleKeydown(e: KeyboardEvent) {
           :file-path="selectedFile"
           :highlight-line="highlightLine"
           :highlight-text="highlightText"
+          :highlight-key="highlightKey"
         />
         <div v-else class="empty-viewer">
           <div class="placeholder">
