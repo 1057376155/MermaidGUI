@@ -80,6 +80,11 @@ async function openInNewWindow(filePath: string) {
   await window.api.newWindow(filePath)
 }
 
+// 新建窗口
+async function createNewWindow() {
+  await window.api.newWindow()
+}
+
 // 监听菜单打开目录事件
 let unsubscribe: (() => void) | undefined
 
@@ -109,7 +114,7 @@ onUnmounted(() => {
         <span class="icon">📁</span>
         打开目录
       </button>
-      <button class="btn" @click="() => window.api.newWindow()" title="新建窗口">
+      <button class="btn" @click="createNewWindow" title="新建窗口">
         <span class="icon">🪟</span>
         新建窗口
       </button>
