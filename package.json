@@ -2,6 +2,7 @@
   "name": "mermaid-gui",
   "version": "1.0.0",
   "description": "Mermaid 文件查看器 - 支持多窗口和树形文件浏览",
+  "author": "cor",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -11,7 +12,8 @@
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder --mac --win --linux"
   },
   "build": {
     "appId": "com.mermaid.gui",
